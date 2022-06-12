@@ -1,0 +1,510 @@
+%%%% Start of Audio Pre-Processing
+
+Clean_Signals = {};
+Noisy_40dB = {};
+Noisy_30dB = {};
+Noisy_20dB = {};
+Noisy_10dB = {};
+Noisy_5dB = {};
+
+
+for i = 1:112
+	signal_name = strcat('DP', string(i), '.wav');
+	[DP, Fs] = audioread(signal_name);
+	Clean_Signals{i} = DP;
+
+	samp = DP;
+	x = samp;
+	L=length(x);
+	signal_power = (norm(x)^2)/L;
+	noise_power = estimatenoise(DP);
+	
+	add_noise = (signal_power - noise_power)/10000 - noise_power;
+	
+	snr40db = wgn(L,1,10*log10(add_noise)); 
+	noisysamp40db = samp + snr40db;
+	Noisy_40dB{i} = noisysamp40db;	
+
+	add_noise = (signal_power - noise_power)/1000 - noise_power;
+
+	snr30db = wgn(L,1,10*log10(add_noise)); 
+	noisysamp30db = samp + snr30db;
+	Noisy_30dB{i} = noisysamp30db;
+
+	add_noise = (signal_power - noise_power)/100 - noise_power;
+
+	snr20db = wgn(L,1,10*log10(add_noise)); 
+	noisysamp20db = samp + snr20db;
+	Noisy_20dB{i} = noisysamp20db;
+
+	add_noise = (signal_power - noise_power)/10 - noise_power;
+
+	snr10db = wgn(L,1,10*log10(add_noise)); 
+	noisysamp10db = samp + snr10db;
+	Noisy_10dB{i} = noisysamp10db;
+
+	add_noise = (signal_power - noise_power)/sqrt(10) - noise_power;
+
+	snr5db = wgn(L,1,10*log10(add_noise)); 
+	noisysamp5db = samp + snr5db;
+	Noisy_5dB{i} = noisysamp5db;
+
+end
+
+%%%% End of Audio Pre-Processing
+
+
+% This block of code is only for testing if the added noise is correct
+%{
+noisy_sig = Noisy_20dB{56};
+noise_power = estimatenoise(noisy_sig);
+L=length(noisy_sig);
+signal_power = (norm(noisy_sig)^2)/L;
+10*log10((signal_power - noise_power)/noise_power)
+%}
+
+
+
+
+%%%% Start of Wavelet Denoising
+
+WaveletDenoised_40dB = {};
+WaveletDenoised_30dB = {};
+WaveletDenoised_20dB = {};
+WaveletDenoised_10dB = {};
+WaveletDenoised_5dB = {};
+
+% row x column
+% row represents (40,30,20,10,5 dB)
+% column represents the 112 signals
+
+WaveletDenoised_DSNR = zeros(5,112);
+WaveletDenoised_SNR = zeros(5,112);
+WaveletDenoised_CC = zeros(5,112);
+
+
+for i = 1:112
+	WaveletDenoised_40dB{i}= wvlt_fltr(Noisy_40dB{i});
+
+	WaveletDenoised_30dB{i}= wvlt_fltr(Noisy_30dB{i});
+
+	WaveletDenoised_20dB{i}= wvlt_fltr(Noisy_20dB{i});
+
+	WaveletDenoised_10dB{i}= wvlt_fltr(Noisy_10dB{i});
+
+	WaveletDenoised_5dB{i}= wvlt_fltr(Noisy_5dB{i});
+
+end
+
+for i = 1:112
+
+	[WaveletDenoised_SNR(1,i), WaveletDenoised_DSNR(1,i), WaveletDenoised_CC(1,i)] = prf_prmtr(Noisy_40dB{i}, WaveletDenoised_40dB{i});
+
+	[WaveletDenoised_SNR(2,i), WaveletDenoised_DSNR(2,i), WaveletDenoised_CC(2,i)] = prf_prmtr(Noisy_30dB{i}, WaveletDenoised_30dB{i});
+
+	[WaveletDenoised_SNR(3,i), WaveletDenoised_DSNR(3,i), WaveletDenoised_CC(3,i)] = prf_prmtr(Noisy_20dB{i}, WaveletDenoised_20dB{i});
+
+	[WaveletDenoised_SNR(4,i), WaveletDenoised_DSNR(4,i), WaveletDenoised_CC(4,i)] = prf_prmtr(Noisy_10dB{i}, WaveletDenoised_10dB{i});
+
+	[WaveletDenoised_SNR(5,i), WaveletDenoised_DSNR(5,i), WaveletDenoised_CC(5,i)] = prf_prmtr(Noisy_5dB{i}, WaveletDenoised_5dB{i});
+
+end
+
+
+AveWaveletDenoised_SNR = zeros(5,1);
+AveWaveletDenoised_CC = zeros(5,1);
+AveWaveletDenoised_DSNR = zeros(5,1);
+
+
+for j = 1:5
+
+	snr = 0;
+	cc = 0;
+	dsnr = 0;
+	
+	for i = 1:112
+		
+		snr = snr + 10.^(WaveletDenoised_SNR(j,i)/10);
+		cc = cc + WaveletDenoised_CC(j,i);
+		dsnr = dsnr + 10.^(WaveletDenoised_DSNR(j,i)/10);
+	
+	end
+	
+	snr = snr / 112;
+	snr = 10*log10(snr);
+	AveWaveletDenoised_SNR(j,1) = snr;
+
+	cc = cc / 112;
+	AveWaveletDenoised_CC(j,1) = cc;
+
+	dsnr = dsnr / 112;
+	dsnr = 10*log10(dsnr);
+	AveWaveletDenoised_DSNR(j,1) = dsnr;
+
+end;
+
+AveWaveletDenoised_SNR
+AveWaveletDenoised_DSNR
+AveWaveletDenoised_CC
+
+%%%% End of Wavelet Denoising
+
+
+
+%%%% Start of S-G Denoising
+
+SGDenoised_40dB = {};
+SGDenoised_30dB = {};
+SGDenoised_20dB = {};
+SGDenoised_10dB = {};
+SGDenoised_5dB = {};
+
+% row x column
+% row represents (40,30,20,10,5 dB)
+% column represents the 112 signals
+
+SGDenoised_SNR = zeros(5,112);
+SGDenoised_DSNR = zeros(5,112);
+SGDenoised_CC = zeros(5,112);
+
+for i = 1:112
+
+	SGDenoised_40dB{i} = sgolayfilt(Noisy_40dB{i},1,17);
+
+	SGDenoised_30dB{i} = sgolayfilt(Noisy_30dB{i},1,17);
+
+	SGDenoised_20dB{i} = sgolayfilt(Noisy_20dB{i},1,17);
+
+	SGDenoised_10dB{i} = sgolayfilt(Noisy_10dB{i},1,17);
+
+	SGDenoised_5dB{i} = sgolayfilt(Noisy_5dB{i},1,17);
+
+	
+end
+
+for i = 1:112
+
+	[SGDenoised_SNR(1,i), SGDenoised_DSNR(1,i), SGDenoised_CC(1,i)] = prf_prmtr(Noisy_40dB{i}, SGDenoised_40dB{i});
+
+	[SGDenoised_SNR(2,i), SGDenoised_DSNR(2,i), SGDenoised_CC(2,i)] = prf_prmtr(Noisy_30dB{i}, SGDenoised_30dB{i});
+
+	[SGDenoised_SNR(3,i), SGDenoised_DSNR(3,i), SGDenoised_CC(3,i)] = prf_prmtr(Noisy_20dB{i}, SGDenoised_20dB{i});
+
+	[SGDenoised_SNR(4,i), SGDenoised_DSNR(4,i), SGDenoised_CC(4,i)] = prf_prmtr(Noisy_10dB{i}, SGDenoised_10dB{i});
+
+	[SGDenoised_SNR(5,i), SGDenoised_DSNR(5,i), SGDenoised_CC(5,i)] = prf_prmtr(Noisy_5dB{i}, SGDenoised_5dB{i});
+
+end
+
+AveSGDenoised_SNR = zeros(5,1);
+AveSGDenoised_CC = zeros(5,1);
+AveSGDenoised_DSNR = zeros(5,1);
+
+
+for j = 1:5
+
+	snr = 0;
+	cc = 0;
+	dsnr = 0;
+	
+	for i = 1:112
+		
+		snr = snr + 10.^(SGDenoised_SNR(j,i)/10);
+		cc = cc + SGDenoised_CC(j,i);
+		dsnr = dsnr + 10.^(SGDenoised_DSNR(j,i)/10);
+	
+	end
+	
+	snr = snr / 112;
+	snr = 10*log10(snr);
+	AveSGDenoised_SNR(j,1) = snr;
+
+	cc = cc / 112;
+	AveSGDenoised_CC(j,1) = cc;
+
+	dsnr = dsnr / 112;
+	dsnr = 10*log10(dsnr);
+	AveSGDenoised_DSNR(j,1) = dsnr;
+
+end;
+
+AveSGDenoised_SNR
+AveSGDenoised_CC
+AveSGDenoised_DSNR
+
+
+%%%% End of S-G Denoising
+
+
+%%%% Start of EMD Denoising
+
+EMDDenoised_40dB = {};
+EMDDenoised_30dB = {};
+EMDDenoised_20dB = {};
+EMDDenoised_10dB = {};
+EMDDenoised_5dB = {};
+
+% row x column
+% row represents (40,30,20,10,5 dB)
+% column represents the 112 signals
+
+EMDDenoised_SNR = zeros(5,112);
+EMDDenoised_DSNR = zeros(5,112);
+EMDDenoised_CC = zeros(5,112);
+
+tracker = 0;
+
+for i = 1:112
+
+	tracker = i
+
+	EMDDenoised_40dB{i}= emd_dfadenoising(Noisy_40dB{i});
+
+	EMDDenoised_30dB{i}= emd_dfadenoising(Noisy_30dB{i});
+
+	EMDDenoised_20dB{i}= emd_dfadenoising(Noisy_20dB{i});
+
+	EMDDenoised_10dB{i}= emd_dfadenoising(Noisy_10dB{i});
+
+	EMDDenoised_5dB{i}= emd_dfadenoising(Noisy_5dB{i});
+
+end
+
+transEMDDenoised_40dB = EMDDenoised_40dB;
+transEMDDenoised_30dB = EMDDenoised_30dB;
+transEMDDenoised_20dB = EMDDenoised_20dB;
+transEMDDenoised_10dB = EMDDenoised_10dB;
+transEMDDenoised_5dB = EMDDenoised_5dB;
+
+for i = 1:112
+	EMDDenoised_40dB{i} = transEMDDenoised_40dB{i}.';
+	EMDDenoised_30dB{i} = transEMDDenoised_30dB{i}.';
+	EMDDenoised_20dB{i} = transEMDDenoised_20dB{i}.';
+	EMDDenoised_10dB{i} = transEMDDenoised_10dB{i}.';
+	EMDDenoised_5dB{i} = transEMDDenoised_5dB{i}.';
+end
+
+
+for i = 1:112
+
+	[EMDDenoised_SNR(1,i), EMDDenoised_DSNR(1,i), EMDDenoised_CC(1,i)] = prf_prmtr(Noisy_40dB{i}, EMDDenoised_40dB{i});
+
+	[EMDDenoised_SNR(2,i), EMDDenoised_DSNR(2,i), EMDDenoised_CC(2,i)] = prf_prmtr(Noisy_30dB{i}, EMDDenoised_30dB{i});
+
+	[EMDDenoised_SNR(3,i), EMDDenoised_DSNR(3,i), EMDDenoised_CC(3,i)] = prf_prmtr(Noisy_20dB{i}, EMDDenoised_20dB{i});
+
+	[EMDDenoised_SNR(4,i), EMDDenoised_DSNR(4,i), EMDDenoised_CC(4,i)] = prf_prmtr(Noisy_10dB{i}, EMDDenoised_10dB{i});
+
+	[EMDDenoised_SNR(5,i), EMDDenoised_DSNR(5,i), EMDDenoised_CC(5,i)] = prf_prmtr(Noisy_5dB{i}, EMDDenoised_5dB{i});
+
+end
+
+AveEMDDenoised_SNR = zeros(5,1);
+AveEMDDenoised_CC = zeros(5,1);
+AveEMDDenoised_DSNR = zeros(5,1);
+
+
+for j = 1:5
+
+	snr = 0;
+	cc = 0;
+	dsnr = 0;
+	
+	for i = 1:112
+		
+		snr = snr + 10.^(EMDDenoised_SNR(j,i)/10);
+		cc = cc + EMDDenoised_CC(j,i);
+		dsnr = dsnr + 10.^(EMDDenoised_DSNR(j,i)/10);
+	
+	end
+	
+	snr = snr / 112;
+	snr = 10*log10(snr);
+	AveEMDDenoised_SNR(j,1) = snr;
+
+	cc = cc / 112;
+	AveEMDDenoised_CC(j,1) = cc;
+
+	dsnr = dsnr / 112;
+	dsnr = 10*log10(dsnr);
+	AveEMDDenoised_DSNR(j,1) = dsnr;
+
+end;
+
+AveEMDDenoised_SNR
+AveEMDDenoised_CC
+AveEMDDenoised_DSNR
+
+
+%%%% End of EMD Denoising
+
+
+
+
+
+
+%%%% Start of EMD + SS Denoising
+
+EMDSSDenoised_40dB = {};
+EMDSSDenoised_30dB = {};
+EMDSSDenoised_20dB = {};
+EMDSSDenoised_10dB = {};
+EMDSSDenoised_5dB = {};
+
+% row x column
+% row represents (40,30,20,10,5 dB)
+% column represents the 112 signals
+
+EMDSSNoisy_SNR = zeros(5,112);
+EMDSSDenoised_SNR = zeros(5,112);
+EMDSSDenoised_CC = zeros(5,112);
+
+for i = 1:112
+	EMDSSDenoised_40dB{i}= spec_sub(EMDDenoised_40dB{i});
+
+	EMDSSDenoised_30dB{i}= spec_sub(EMDDenoised_30dB{i});
+
+	EMDSSDenoised_20dB{i}= spec_sub(EMDDenoised_20dB{i});
+
+	EMDSSDenoised_10dB{i}= spec_sub(EMDDenoised_10dB{i});
+
+	EMDSSDenoised_5dB{i}= spec_sub(EMDDenoised_5dB{i});
+
+end
+
+for i = 1:112
+
+	[EMDSSDenoised_SNR(1,i), EMDSSDenoised_DSNR(1,i), EMDSSDenoised_CC(1,i)] = prf_prmtr(Noisy_40dB{i}, EMDSSDenoised_40dB{i});
+
+	[EMDSSDenoised_SNR(2,i), EMDSSDenoised_DSNR(2,i), EMDSSDenoised_CC(2,i)] = prf_prmtr(Noisy_30dB{i}, EMDSSDenoised_30dB{i});
+
+	[EMDSSDenoised_SNR(3,i), EMDSSDenoised_DSNR(3,i), EMDSSDenoised_CC(3,i)] = prf_prmtr(Noisy_20dB{i}, EMDSSDenoised_20dB{i});
+
+	[EMDSSDenoised_SNR(4,i), EMDSSDenoised_DSNR(4,i), EMDSSDenoised_CC(4,i)] = prf_prmtr(Noisy_10dB{i}, EMDSSDenoised_10dB{i});
+
+	[EMDSSDenoised_SNR(5,i), EMDSSDenoised_DSNR(5,i), EMDSSDenoised_CC(5,i)] = prf_prmtr(Noisy_5dB{i}, EMDSSDenoised_5dB{i});
+
+
+end
+
+AveEMDSSDenoised_SNR = zeros(5,1);
+AveEMDSSDenoised_CC = zeros(5,1);
+AveEMDSSDenoised_DSNR = zeros(5,1);
+
+
+for j = 1:5
+
+	snr = 0;
+	cc = 0;
+	dsnr = 0;
+	
+	for i = 1:112
+		
+		snr = snr + 10.^(EMDSSDenoised_SNR(j,i)/10);
+		cc = cc + EMDSSDenoised_CC(j,i);
+		dsnr = dsnr + 10.^(EMDSSDenoised_DSNR(j,i)/10);
+	
+	end
+	
+	snr = snr / 112;
+	snr = 10*log10(snr);
+	AveEMDSSDenoised_SNR(j,1) = snr;
+
+	cc = cc / 112;
+	AveEMDSSDenoised_CC(j,1) = cc;
+
+	dsnr = dsnr / 112;
+	dsnr = 10*log10(dsnr);
+	AveEMDSSDenoised_DSNR(j,1) = dsnr;
+
+end;
+
+AveEMDSSDenoised_SNR
+AveEMDSSDenoised_CC
+AveEMDSSDenoised_DSNR
+
+%%%% End of EMD + SS Denoising
+
+
+
+%%%% Start of SS Denoising
+
+SSDenoised_40dB = {};
+SSDenoised_30dB = {};
+SSDenoised_20dB = {};
+SSDenoised_10dB = {};
+SSDenoised_5dB = {};
+
+% row x column
+% row represents (40,30,20,10,5 dB)
+% column represents the 112 signals
+
+SSDenoised_DSNR = zeros(5,112);
+SSDenoised_SNR = zeros(5,112);
+SSDenoised_CC = zeros(5,112);
+
+for i = 1:112
+	SSDenoised_40dB{i}= spec_sub(Noisy_40dB{i});
+
+	SSDenoised_30dB{i}= spec_sub(Noisy_30dB{i});
+
+	SSDenoised_20dB{i}= spec_sub(Noisy_20dB{i});
+
+	SSDenoised_10dB{i}= spec_sub(Noisy_10dB{i});
+
+	SSDenoised_5dB{i}= spec_sub(Noisy_5dB{i});
+
+end
+
+for i = 1:112
+
+	[SSDenoised_SNR(1,i), SSDenoised_DSNR(1,i), SSDenoised_CC(1,i)] = prf_prmtr(Noisy_40dB{i}, SSDenoised_40dB{i});
+
+	[SSDenoised_SNR(2,i), SSDenoised_DSNR(2,i), SSDenoised_CC(2,i)] = prf_prmtr(Noisy_30dB{i}, SSDenoised_30dB{i});
+
+	[SSDenoised_SNR(3,i), SSDenoised_DSNR(3,i), SSDenoised_CC(3,i)] = prf_prmtr(Noisy_20dB{i}, SSDenoised_20dB{i});
+
+	[SSDenoised_SNR(4,i), SSDenoised_DSNR(4,i), SSDenoised_CC(4,i)] = prf_prmtr(Noisy_10dB{i}, SSDenoised_10dB{i});
+
+	[SSDenoised_SNR(5,i), SSDenoised_DSNR(5,i), SSDenoised_CC(5,i)] = prf_prmtr(Noisy_5dB{i}, SSDenoised_5dB{i});
+
+	
+end
+
+AveSSDenoised_SNR = zeros(5,1);
+AveSSDenoised_CC = zeros(5,1);
+AveSSDenoised_DSNR = zeros(5,1);
+
+for j = 1:5
+
+	snr = 0;
+	cc = 0;
+	dsnr = 0;
+	
+	for i = 1:112
+		
+		snr = snr + 10.^(SSDenoised_SNR(j,i)/10);
+		cc = cc + SSDenoised_CC(j,i);
+		dsnr = dsnr + 10.^(SSDenoised_DSNR(j,i)/10);
+	
+	end
+	
+	snr = snr / 112;
+	snr = 10*log10(snr);
+	AveSSDenoised_SNR(j,1) = snr;
+
+	cc = cc / 112;
+	AveSSDenoised_CC(j,1) = cc;
+
+	dsnr = dsnr / 112;
+	dsnr = 10*log10(dsnr);
+	AveSSDenoised_DSNR(j,1) = dsnr;
+
+end;
+
+AveSSDenoised_SNR
+AveSSDenoised_CC
+AveSSDenoised_DSNR
+
+%%%% End of SS Denoising
+
